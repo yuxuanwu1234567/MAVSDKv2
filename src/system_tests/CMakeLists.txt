@@ -1,5 +1,12 @@
 add_executable(system_tests_runner
+    camera_mode.cpp
     camera_take_photo.cpp
+    camera_take_photo_interval.cpp
+    camera_format_storage.cpp
+    camera_settings.cpp
+    camera_storage.cpp
+    camera_list_cameras.cpp
+    camera_video_stream.cpp
     component_metadata.cpp
     action_arm_disarm.cpp
     param_set_and_get.cpp
@@ -18,6 +25,7 @@ add_executable(system_tests_runner
     ftp_remove_dir.cpp
     ftp_compare_files.cpp
     ftp_list_dir.cpp
+    mavlink_direct.cpp
     system_tests_runner.cpp
 )
 
@@ -26,8 +34,9 @@ target_include_directories(system_tests_runner
     ${PROJECT_SOURCE_DIR}/mavsdk/core
 )
 
-hunter_add_package(GTest)
 find_package(GTest REQUIRED)
+
+find_package(jsoncpp REQUIRED)
 
 target_link_libraries(system_tests_runner
     PRIVATE
@@ -35,6 +44,7 @@ target_link_libraries(system_tests_runner
     GTest::gtest
     GTest::gtest_main
     GTest::gmock
+    JsonCpp::JsonCpp
 )
 
 set_target_properties(system_tests_runner

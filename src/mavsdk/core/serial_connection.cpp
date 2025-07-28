@@ -10,6 +10,8 @@
 #include <utility>
 #endif
 
+#include <sstream>
+
 namespace mavsdk {
 
 #ifndef WINDOWS
@@ -47,11 +49,17 @@ std::string GetLastErrorStdStr()
 
 SerialConnection::SerialConnection(
     Connection::ReceiverCallback receiver_callback,
+    Connection::LibmavReceiverCallback libmav_receiver_callback,
+    mav::MessageSet& message_set,
     std::string path,
     int baudrate,
     bool flow_control,
     ForwardingOption forwarding_option) :
-    Connection(std::move(receiver_callback), forwarding_option),
+    Connection(
+        std::move(receiver_callback),
+        std::move(libmav_receiver_callback),
+        message_set,
+        forwarding_option),
     _serial_node(std::move(path)),
     _baudrate(baudrate),
     _flow_control(flow_control)
@@ -66,6 +74,10 @@ SerialConnection::~SerialConnection()
 ConnectionResult SerialConnection::start()
 {
     if (!start_mavlink_receiver()) {
+        return ConnectionResult::ConnectionsExhausted;
+    }
+
+    if (!start_libmav_receiver()) {
         return ConnectionResult::ConnectionsExhausted;
     }
 
@@ -249,16 +261,21 @@ ConnectionResult SerialConnection::stop()
     return ConnectionResult::Success;
 }
 
-bool SerialConnection::send_message(const mavlink_message_t& message)
+std::pair<bool, std::string> SerialConnection::send_message(const mavlink_message_t& message)
 {
+    std::pair<bool, std::string> result;
+
     if (_serial_node.empty()) {
         LogErr() << "Dev Path unknown";
-        return false;
+        result.first = false;
+        result.second = "Dev Path unknown";
+        return result;
     }
 
     if (_baudrate == 0) {
-        LogErr() << "Baudrate unknown";
-        return false;
+        result.first = false;
+        result.second = "Baudrate unknown";
+        return result;
     }
 
     uint8_t buffer[MAVLINK_MAX_PACKET_LEN];
@@ -269,17 +286,29 @@ bool SerialConnection::send_message(const mavlink_message_t& message)
     send_len = static_cast<int>(write(_fd, buffer, buffer_len));
 #else
     if (!WriteFile(_handle, buffer, buffer_len, LPDWORD(&send_len), NULL)) {
-        LogErr() << "WriteFile failure: " << GET_ERROR();
-        return false;
+        std::stringstream ss;
+        ss << "WriteFile failure: " << GET_ERROR();
+        LogErr() << ss.str();
+        result.first = false;
+        result.second = ss.str();
+        return result;
     }
 #endif
 
     if (send_len != buffer_len) {
-        LogErr() << "write failure: " << GET_ERROR();
-        return false;
+        result.first = false;
+        result.second = "Baudrate unknown";
+
+        std::stringstream ss;
+        ss << "write failure: " << GET_ERROR();
+        LogErr() << ss.str();
+        result.first = false;
+        result.second = ss.str();
+        return result;
     }
 
-    return true;
+    result.first = true;
+    return result;
 }
 
 void SerialConnection::receive()

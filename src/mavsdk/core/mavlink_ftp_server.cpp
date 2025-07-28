@@ -45,13 +45,17 @@ void MavlinkFtpServer::process_mavlink_ftp_message(const mavlink_message_t& msg)
 
     if (ftp_req.target_system != 0 &&
         ftp_req.target_system != _server_component_impl.get_own_system_id()) {
-        LogWarn() << "wrong sysid!";
+        if (_debugging) {
+            LogDebug() << "Received FTP message with wrong target system ID";
+        }
         return;
     }
 
     if (ftp_req.target_component != 0 &&
         ftp_req.target_component != _server_component_impl.get_own_component_id()) {
-        LogWarn() << "wrong compid!";
+        if (_debugging) {
+            LogDebug() << "Received FTP message with wrong target component ID";
+        }
         return;
     }
 
@@ -252,6 +256,7 @@ MavlinkFtpServer::_path_from_string(const std::string& payload_path)
 
     // No permission whatsoever if the root dir is not set.
     if (_root_dir.empty()) {
+        LogWarn() << "Root dir not set!";
         return ServerResult::ERR_FAIL;
     }
 
@@ -281,10 +286,13 @@ void MavlinkFtpServer::set_root_directory(const std::string& root_dir)
 {
     std::lock_guard<std::mutex> lock(_mutex);
 
-    std::error_code ignored;
-    _root_dir = fs::canonical(fs::path(root_dir), ignored).string();
+    std::error_code ec;
+    _root_dir = fs::canonical(fs::path(root_dir), ec).string();
+    if (ec) {
+        LogWarn() << "Root dir could not be made absolute: " << ec.message();
+    }
     if (_debugging) {
-        LogDebug() << "Set root dir to: " << _root_dir;
+        LogDebug() << "Set root dir to: " << _root_dir << " from: " << root_dir;
     }
 }
 

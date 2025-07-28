@@ -80,6 +80,25 @@ public:
     friend std::ostream& operator<<(std::ostream& str, Telemetry::FixType const& fix_type);
 
     /**
+     * @brief Battery function type.
+     */
+    enum class BatteryFunction {
+        Unknown, /**< @brief Battery function is unknown. */
+        All, /**< @brief Battery supports all flight systems. */
+        Propulsion, /**< @brief Battery for the propulsion system. */
+        Avionics, /**< @brief Avionics battery. */
+        Payload, /**< @brief Payload battery. */
+    };
+
+    /**
+     * @brief Stream operator to print information about a `Telemetry::BatteryFunction`.
+     *
+     * @return A reference to the stream.
+     */
+    friend std::ostream&
+    operator<<(std::ostream& str, Telemetry::BatteryFunction const& battery_function);
+
+    /**
      * @brief Flight modes.
      *
      * For more information about flight modes, check out
@@ -383,6 +402,8 @@ public:
                             consumption estimate */
         float remaining_percent{
             float(NAN)}; /**< @brief Estimated battery remaining (range: 0 to 100) */
+        float time_remaining_s{float(NAN)}; /**< @brief Estimated battery usage time remaining */
+        BatteryFunction battery_function{}; /**< @brief Function of the battery */
     };
 
     /**
@@ -813,6 +834,10 @@ public:
             float(NAN)}; /**< @brief Current indicated airspeed (IAS) in metres per second */
         float throttle_percentage{float(NAN)}; /**< @brief Current throttle setting (0 to 100) */
         float climb_rate_m_s{float(NAN)}; /**< @brief Current climb rate in metres per second */
+        float groundspeed_m_s{float(NAN)}; /**< @brief Current groundspeed metres per second */
+        float heading_deg{
+            float(NAN)}; /**< @brief Current heading in compass units (0-360, 0=north) */
+        float absolute_altitude_m{float(NAN)}; /**< @brief Current altitude in metres (MSL) */
     };
 
     /**
@@ -994,6 +1019,41 @@ public:
      * @return A reference to the stream.
      */
     friend std::ostream& operator<<(std::ostream& str, Telemetry::Altitude const& altitude);
+
+    /**
+     * @brief Wind message type
+     */
+    struct Wind {
+        float wind_x_ned_m_s{float(NAN)}; /**< @brief Wind in North (NED) direction */
+        float wind_y_ned_m_s{float(NAN)}; /**< @brief  Wind in East (NED) direction */
+        float wind_z_ned_m_s{float(NAN)}; /**< @brief Wind in down (NED) direction */
+        float horizontal_variability_stddev_m_s{
+            float(NAN)}; /**< @brief Variability of wind in XY, 1-STD estimated from a 1 Hz
+                            lowpassed wind estimate */
+        float vertical_variability_stddev_m_s{
+            float(NAN)}; /**< @brief Variability of wind in Z, 1-STD estimated from a 1 Hz lowpassed
+                            wind estimate */
+        float wind_altitude_msl_m{
+            float(NAN)}; /**< @brief Altitude (MSL) that this measurement was taken at */
+        float horizontal_wind_speed_accuracy_m_s{
+            float(NAN)}; /**< @brief Horizontal speed 1-STD accuracy */
+        float vertical_wind_speed_accuracy_m_s{
+            float(NAN)}; /**< @brief Vertical speed 1-STD accuracy */
+    };
+
+    /**
+     * @brief Equal operator to compare two `Telemetry::Wind` objects.
+     *
+     * @return `true` if items are equal.
+     */
+    friend bool operator==(const Telemetry::Wind& lhs, const Telemetry::Wind& rhs);
+
+    /**
+     * @brief Stream operator to print information about a `Telemetry::Wind`.
+     *
+     * @return A reference to the stream.
+     */
+    friend std::ostream& operator<<(std::ostream& str, Telemetry::Wind const& wind);
 
     /**
      * @brief Possible results returned for telemetry requests.
@@ -1891,6 +1951,33 @@ public:
     Altitude altitude() const;
 
     /**
+     * @brief Callback type for subscribe_wind.
+     */
+    using WindCallback = std::function<void(Wind)>;
+
+    /**
+     * @brief Handle type for subscribe_wind.
+     */
+    using WindHandle = Handle<Wind>;
+
+    /**
+     * @brief Subscribe to 'Wind Estimated' updates.
+     */
+    WindHandle subscribe_wind(const WindCallback& callback);
+
+    /**
+     * @brief Unsubscribe from subscribe_wind
+     */
+    void unsubscribe_wind(WindHandle handle);
+
+    /**
+     * @brief Poll for 'Wind' (blocking).
+     *
+     * @return One Wind update.
+     */
+    Wind wind() const;
+
+    /**
      * @brief Set rate to 'position' updates.
      *
      * This function is non-blocking. See 'set_rate_position' for the blocking counterpart.
@@ -1902,7 +1989,9 @@ public:
      *
      * This function is blocking. See 'set_rate_position_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_position(double rate_hz) const;
 
@@ -1918,7 +2007,9 @@ public:
      *
      * This function is blocking. See 'set_rate_home_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_home(double rate_hz) const;
 
@@ -1934,7 +2025,9 @@ public:
      *
      * This function is blocking. See 'set_rate_in_air_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_in_air(double rate_hz) const;
 
@@ -1949,9 +2042,11 @@ public:
      * @brief Set rate to landed state updates
      *
      * This function is blocking. See 'set_rate_landed_state_async' for the non-blocking
-     * counterpart.
+     counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_landed_state(double rate_hz) const;
 
@@ -1967,7 +2062,9 @@ public:
      *
      * This function is blocking. See 'set_rate_vtol_state_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_vtol_state(double rate_hz) const;
 
@@ -1983,9 +2080,11 @@ public:
      * @brief Set rate to 'attitude euler angle' updates.
      *
      * This function is blocking. See 'set_rate_attitude_quaternion_async' for the non-blocking
-     * counterpart.
+     counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_attitude_quaternion(double rate_hz) const;
 
@@ -2000,9 +2099,11 @@ public:
      * @brief Set rate to 'attitude quaternion' updates.
      *
      * This function is blocking. See 'set_rate_attitude_euler_async' for the non-blocking
-     * counterpart.
+     counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_attitude_euler(double rate_hz) const;
 
@@ -2019,9 +2120,11 @@ public:
      * Set rate to 'ground speed' updates (NED).
      *
      * This function is blocking. See 'set_rate_velocity_ned_async' for the non-blocking
-     * counterpart.
+     counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_velocity_ned(double rate_hz) const;
 
@@ -2037,7 +2140,9 @@ public:
      *
      * This function is blocking. See 'set_rate_gps_info_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_gps_info(double rate_hz) const;
 
@@ -2053,7 +2158,9 @@ public:
      *
      * This function is blocking. See 'set_rate_battery_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_battery(double rate_hz) const;
 
@@ -2069,7 +2176,9 @@ public:
      *
      * This function is blocking. See 'set_rate_rc_status_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_rc_status(double rate_hz) const;
 
@@ -2085,9 +2194,11 @@ public:
      * @brief Set rate to 'actuator control target' updates.
      *
      * This function is blocking. See 'set_rate_actuator_control_target_async' for the non-blocking
-     * counterpart.
+     counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_actuator_control_target(double rate_hz) const;
 
@@ -2103,9 +2214,11 @@ public:
      * @brief Set rate to 'actuator output status' updates.
      *
      * This function is blocking. See 'set_rate_actuator_output_status_async' for the non-blocking
-     * counterpart.
+     counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_actuator_output_status(double rate_hz) const;
 
@@ -2121,7 +2234,9 @@ public:
      *
      * This function is blocking. See 'set_rate_odometry_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_odometry(double rate_hz) const;
 
@@ -2137,9 +2252,11 @@ public:
      * @brief Set rate to 'position velocity' updates.
      *
      * This function is blocking. See 'set_rate_position_velocity_ned_async' for the non-blocking
-     * counterpart.
+     counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_position_velocity_ned(double rate_hz) const;
 
@@ -2154,9 +2271,11 @@ public:
      * @brief Set rate to 'ground truth' updates.
      *
      * This function is blocking. See 'set_rate_ground_truth_async' for the non-blocking
-     * counterpart.
+     counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_ground_truth(double rate_hz) const;
 
@@ -2171,9 +2290,11 @@ public:
      * @brief Set rate to 'fixedwing metrics' updates.
      *
      * This function is blocking. See 'set_rate_fixedwing_metrics_async' for the non-blocking
-     * counterpart.
+     counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_fixedwing_metrics(double rate_hz) const;
 
@@ -2189,7 +2310,9 @@ public:
      *
      * This function is blocking. See 'set_rate_imu_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_imu(double rate_hz) const;
 
@@ -2205,7 +2328,9 @@ public:
      *
      * This function is blocking. See 'set_rate_scaled_imu_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_scaled_imu(double rate_hz) const;
 
@@ -2221,7 +2346,9 @@ public:
      *
      * This function is blocking. See 'set_rate_raw_imu_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_raw_imu(double rate_hz) const;
 
@@ -2236,9 +2363,11 @@ public:
      * @brief Set rate to 'unix epoch time' updates.
      *
      * This function is blocking. See 'set_rate_unix_epoch_time_async' for the non-blocking
-     * counterpart.
+     counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_unix_epoch_time(double rate_hz) const;
 
@@ -2253,9 +2382,11 @@ public:
      * @brief Set rate to 'Distance Sensor' updates.
      *
      * This function is blocking. See 'set_rate_distance_sensor_async' for the non-blocking
-     * counterpart.
+     counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_distance_sensor(double rate_hz) const;
 
@@ -2271,9 +2402,29 @@ public:
      *
      * This function is blocking. See 'set_rate_altitude_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_rate_altitude(double rate_hz) const;
+
+    /**
+     * @brief Set rate to 'Health' updates.
+     *
+     * This function is non-blocking. See 'set_rate_health' for the blocking counterpart.
+     */
+    void set_rate_health_async(double rate_hz, const ResultCallback callback);
+
+    /**
+     * @brief Set rate to 'Health' updates.
+     *
+     * This function is blocking. See 'set_rate_health_async' for the non-blocking counterpart.
+     *
+
+     * @return Result of request.
+
+     */
+    Result set_rate_health(double rate_hz) const;
 
     /**
      * @brief Callback type for get_gps_global_origin_async.

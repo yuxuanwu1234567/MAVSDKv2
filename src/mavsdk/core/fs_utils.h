@@ -17,4 +17,12 @@ std::optional<std::filesystem::path> get_cache_directory();
  */
 std::optional<std::filesystem::path> create_tmp_directory(const std::string& prefix);
 
+std::string replace_non_ascii_and_whitespace(const std::string& input);
+
+#ifdef ANDROID
+extern "C" {
+extern char* mavsdk_temp_path;
+}
+#endif
+
 } // namespace mavsdk

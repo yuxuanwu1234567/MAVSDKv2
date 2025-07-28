@@ -109,6 +109,8 @@ public:
     MOCK_CONST_METHOD1(unsubscribe_vtol_state, void(Telemetry::VtolStateHandle)){};
     MOCK_CONST_METHOD1(subscribe_altitude, Telemetry::AltitudeHandle(Telemetry::AltitudeCallback));
     MOCK_CONST_METHOD1(unsubscribe_altitude, void(Telemetry::AltitudeHandle));
+    MOCK_CONST_METHOD1(subscribe_wind, Telemetry::WindHandle(Telemetry::WindCallback)){};
+    MOCK_CONST_METHOD1(unsubscribe_wind, void(Telemetry::WindHandle)){};
 
     MOCK_METHOD1(set_rate_position, Telemetry::Result(double)){};
     MOCK_METHOD1(set_rate_home, Telemetry::Result(double)){};
@@ -135,6 +137,7 @@ public:
     MOCK_METHOD1(set_rate_unix_epoch_time, Telemetry::Result(double)){};
     MOCK_METHOD1(set_rate_vtol_state, Telemetry::Result(double)){};
     MOCK_METHOD1(set_rate_altitude, Telemetry::Result(double)){};
+    MOCK_METHOD1(set_rate_health, Telemetry::Result(double)){};
 
     MOCK_CONST_METHOD2(set_rate_position_async, void(double, Telemetry::ResultCallback)){};
     MOCK_CONST_METHOD2(set_rate_home_async, void(double, Telemetry::ResultCallback)){};
@@ -164,6 +167,8 @@ public:
     MOCK_CONST_METHOD2(set_rate_raw_imu_async, void(double, Telemetry::ResultCallback)){};
     MOCK_CONST_METHOD2(set_rate_unix_epoch_time_async, void(double, Telemetry::ResultCallback)){};
     MOCK_CONST_METHOD2(set_rate_altitude_async, void(double, Telemetry::ResultCallback)){};
+    MOCK_CONST_METHOD2(set_rate_health_async, void(double, Telemetry::ResultCallback)){};
+
     MOCK_METHOD0(
         get_gps_global_origin, std::pair<Telemetry::Result, Telemetry::GpsGlobalOrigin>()){};
     MOCK_METHOD1(get_gps_global_origin_async, void(Telemetry::GetGpsGlobalOriginCallback)){};

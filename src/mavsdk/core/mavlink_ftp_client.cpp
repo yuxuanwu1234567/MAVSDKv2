@@ -1,6 +1,6 @@
 #include "mavlink_ftp_client.h"
 #include "system_impl.h"
-#include "plugin_base.h"
+#include "overloaded.h"
 #include "unused.h"
 #include <algorithm>
 #include <fstream>
@@ -31,6 +31,7 @@ MavlinkFtpClient::MavlinkFtpClient(SystemImpl& system_impl) : _system_impl(syste
 
 MavlinkFtpClient::~MavlinkFtpClient()
 {
+    stop_timer();
     _system_impl.unregister_all_mavlink_message_handlers(this);
 }
 
@@ -107,13 +108,17 @@ void MavlinkFtpClient::process_mavlink_ftp_message(const mavlink_message_t& msg)
     mavlink_msg_file_transfer_protocol_decode(&msg, &ftp_req);
 
     if (ftp_req.target_system != 0 && ftp_req.target_system != _system_impl.get_own_system_id()) {
-        LogWarn() << "Received FTP with wrong target system ID!";
+        if (_debugging) {
+            LogDebug() << "Received FTP message with wrong target system ID";
+        }
         return;
     }
 
     if (ftp_req.target_component != 0 &&
         ftp_req.target_component != _system_impl.get_own_component_id()) {
-        LogWarn() << "Received FTP with wrong target component ID!";
+        if (_debugging) {
+            LogDebug() << "Received FTP message with wrong target component ID";
+        }
         return;
     }
 
@@ -377,6 +382,7 @@ void MavlinkFtpClient::process_mavlink_ftp_message(const mavlink_message_t& msg)
 bool MavlinkFtpClient::download_start(Work& work, DownloadItem& item)
 {
     fs::path local_path = fs::path(item.local_folder) / fs::path(item.remote_path).filename();
+    fs::create_directories(fs::path(item.local_folder));
 
     if (_debugging) {
         LogDebug() << "Trying to open write to local path: " << local_path.string();

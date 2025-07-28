@@ -105,6 +105,7 @@ void MissionRawImpl::process_mission_current(const mavlink_message_t& message)
         if (mission_current.seq != _mission_progress.last_reached) {
             _mission_progress.last.current = mission_current.seq;
         }
+        _mission_progress.mission_state = mission_current.mission_state;
     }
     {
         std::lock_guard<std::mutex> lock(_mission_changed.mutex);
@@ -656,6 +657,29 @@ MissionRawImpl::import_qgroundcontrol_mission_from_string(const std::string& qgc
     return MissionImport::parse_json(qgc_plan, _system_impl->autopilot());
 }
 
+std::pair<MissionRaw::Result, MissionRaw::MissionImportData>
+MissionRawImpl::import_mission_planner_mission(std::string mission_planner_path)
+{
+    std::ifstream file(mission_planner_path);
+    if (!file) {
+        return std::make_pair<MissionRaw::Result, MissionRaw::MissionImportData>(
+            MissionRaw::Result::FailedToOpenMissionPlannerPlan, {});
+    }
+
+    std::stringstream buf;
+    buf << file.rdbuf();
+    file.close();
+
+    return MissionImport::parse_mission_planner(buf.str(), _system_impl->autopilot());
+}
+
+std::pair<MissionRaw::Result, MissionRaw::MissionImportData>
+MissionRawImpl::import_mission_planner_mission_from_string(
+    const std::string& mission_planner_mission)
+{
+    return MissionImport::parse_mission_planner(mission_planner_mission, _system_impl->autopilot());
+}
+
 MissionRaw::Result MissionRawImpl::convert_result(MavlinkMissionTransferClient::Result result)
 {
     switch (result) {
@@ -692,5 +716,37 @@ MissionRaw::Result MissionRawImpl::convert_result(MavlinkMissionTransferClient::
         default:
             return MissionRaw::Result::Unknown;
     }
+}
+
+std::pair<MissionRaw::Result, bool> MissionRawImpl::is_mission_finished() const
+{
+    std::lock_guard<std::mutex> lock(_mission_progress.mutex);
+
+    if (_mission_progress.last.current < 0) {
+        return std::make_pair<MissionRaw::Result, bool>(MissionRaw::Result::Success, false);
+    }
+
+    if (_mission_progress.last_reached < 0) {
+        return std::make_pair<MissionRaw::Result, bool>(MissionRaw::Result::Success, false);
+    }
+
+    if (_mission_progress.last.total <= 0) {
+        return std::make_pair<MissionRaw::Result, bool>(MissionRaw::Result::Success, false);
+    }
+
+    // If mission_state is Unknown, fall back to the previous behavior
+    if (_mission_progress.mission_state == MISSION_STATE_UNKNOWN) {
+        return std::make_pair<MissionRaw::Result, bool>(
+            MissionRaw::Result::Success,
+            _mission_progress.last_reached == _mission_progress.last.total - 1);
+    }
+
+    // If mission_state is Completed, the mission is finished
+    if (_mission_progress.mission_state == MISSION_STATE_COMPLETE) {
+        return std::make_pair<MissionRaw::Result, bool>(MissionRaw::Result::Success, true);
+    }
+
+    // If mission_state is NotCompleted, the mission is not finished
+    return std::make_pair<MissionRaw::Result, bool>(MissionRaw::Result::Success, false);
 }
 } // namespace mavsdk

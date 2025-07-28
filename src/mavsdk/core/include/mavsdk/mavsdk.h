@@ -126,6 +126,44 @@ public:
     void remove_connection(ConnectionHandle handle);
 
     /**
+     * ConnectionError type
+     */
+    struct ConnectionError {
+        std::string error_description; ///< The error description
+        ConnectionHandle connection_handle; ///< The connection handle
+    };
+
+    /**
+     * Connection Error callback type
+     */
+    using ConnectionErrorCallback = std::function<void(ConnectionError)>;
+
+    /**
+     * @brief Handle type to remove a connection error subscription.
+     */
+    using ConnectionErrorHandle = Handle<ConnectionError>;
+
+    /**
+     * Subscribe to connection errors.
+     *
+     * This will trigger when messages fail to be sent which can help
+     * diagnosing network interfaces or serial devices disappearing.
+     *
+     * Usually, an error will require to remove a connection and add it fresh.
+     *
+     * @param callback Callback to subscribe.
+     * @return Handle to unsubscribe again.
+     */
+    ConnectionErrorHandle subscribe_connection_errors(ConnectionErrorCallback callback);
+
+    /**
+     * Unsubscribe from connection errors.
+     *
+     * @param handle Handle to unsubscribe.
+     */
+    void unsubscribe_connection_errors(ConnectionErrorHandle handle);
+
+    /**
      * @brief Get a vector of systems which have been discovered or set-up.
      *
      * @return The vector of systems which are available.
@@ -211,13 +249,26 @@ public:
          */
         void set_component_type(ComponentType component_type);
 
+        /**
+         * @brief Get the mav type (vehicle type) of this configuration
+         * @return `uint8_t` the mav type stored in this configuration
+         */
+        uint8_t get_mav_type() const;
+
+        /**
+         * @brief Set the mav type (vehicle type) of this configuration.
+         */
+        void set_mav_type(uint8_t mav_type);
+
     private:
         uint8_t _system_id;
         uint8_t _component_id;
         bool _always_send_heartbeats;
         ComponentType _component_type;
+        MAV_TYPE _mav_type;
 
         static ComponentType component_type_for_component_id(uint8_t component_id);
+        static MAV_TYPE mav_type_for_component_type(ComponentType component_type);
     };
 
     /**

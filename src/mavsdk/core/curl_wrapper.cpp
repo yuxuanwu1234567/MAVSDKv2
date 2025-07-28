@@ -29,6 +29,8 @@ bool CurlWrapper::download_text(const std::string& url, std::string& content)
         curl_easy_setopt(curl.get(), CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, write_callback);
         curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &readBuffer);
+        curl_easy_setopt(curl.get(), CURLOPT_SSL_VERIFYPEER, 1L);
+        curl_easy_setopt(curl.get(), CURLOPT_FOLLOWLOCATION, 1L);
         res = curl_easy_perform(curl.get());
         content = readBuffer;
 
@@ -76,14 +78,14 @@ static int download_progress_update(
     }
 
     if (dltotal == 0 || dlnow == 0) {
-        return myp->progress_callback(0, HttpStatus::Idle, CURLcode::CURLE_OK);
-    }
+        myp->progress_callback(0, HttpStatus::Idle, CURLcode::CURLE_OK);
+    } else {
+        int percentage = static_cast<int>(100 * dlnow / dltotal);
 
-    int percentage = static_cast<int>(100 / dltotal * dlnow);
-
-    if (percentage > myp->progress_in_percentage) {
-        myp->progress_in_percentage = percentage;
-        return myp->progress_callback(percentage, HttpStatus::Downloading, CURLcode::CURLE_OK);
+        if (percentage > myp->progress_in_percentage) {
+            myp->progress_in_percentage = percentage;
+            myp->progress_callback(percentage, HttpStatus::Downloading, CURLcode::CURLE_OK);
+        }
     }
 
     return 0;
@@ -108,6 +110,8 @@ bool CurlWrapper::download_file_to_path(
         curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, NULL);
         curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, fp);
         curl_easy_setopt(curl.get(), CURLOPT_NOPROGRESS, 0L);
+        curl_easy_setopt(curl.get(), CURLOPT_SSL_VERIFYPEER, 1L);
+        curl_easy_setopt(curl.get(), CURLOPT_FOLLOWLOCATION, 1L);
         res = curl_easy_perform(curl.get());
         fclose(fp);
 

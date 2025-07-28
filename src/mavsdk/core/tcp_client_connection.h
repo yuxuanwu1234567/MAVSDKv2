@@ -23,6 +23,8 @@ class TcpClientConnection : public Connection {
 public:
     TcpClientConnection(
         Connection::ReceiverCallback receiver_callback,
+        Connection::LibmavReceiverCallback libmav_receiver_callback,
+        mav::MessageSet& message_set,
         std::string remote_ip,
         int remote_port,
         ForwardingOption forwarding_option = ForwardingOption::ForwardingOff);
@@ -30,7 +32,7 @@ public:
     ConnectionResult start() override;
     ConnectionResult stop() override;
 
-    bool send_message(const mavlink_message_t& message) override;
+    std::pair<bool, std::string> send_message(const mavlink_message_t& message) override;
 
     // Non-copyable
     TcpClientConnection(const TcpClientConnection&) = delete;
@@ -49,7 +51,6 @@ private:
 
     std::unique_ptr<std::thread> _recv_thread{};
     std::atomic_bool _should_exit;
-    std::atomic_bool _is_ok{false};
 };
 
 } // namespace mavsdk

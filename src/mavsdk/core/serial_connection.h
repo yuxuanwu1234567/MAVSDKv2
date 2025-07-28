@@ -16,6 +16,8 @@ class SerialConnection : public Connection {
 public:
     explicit SerialConnection(
         Connection::ReceiverCallback receiver_callback,
+        Connection::LibmavReceiverCallback libmav_receiver_callback,
+        mav::MessageSet& message_set,
         std::string path,
         int baudrate,
         bool flow_control,
@@ -24,7 +26,7 @@ public:
     ConnectionResult stop() override;
     ~SerialConnection() override;
 
-    bool send_message(const mavlink_message_t& message) override;
+    std::pair<bool, std::string> send_message(const mavlink_message_t& message) override;
 
     // Non-copyable
     SerialConnection(const SerialConnection&) = delete;

@@ -1,8 +1,11 @@
 
 #include "fs_utils.h"
 #include "log.h"
+#include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <random>
+#include <string>
 
 #if defined(LINUX) || defined(APPLE)
 #include <pwd.h>
@@ -16,6 +19,13 @@
 #endif
 
 namespace mavsdk {
+
+#ifdef ANDROID
+extern "C" {
+// Default Android temp path that can be overridden by JNI if needed
+char* mavsdk_temp_path = const_cast<char*>("/data/local/tmp");
+}
+#endif
 
 #ifdef WINDOWS
 static std::optional<std::filesystem::path> get_known_windows_path(REFKNOWNFOLDERID folderId)
@@ -90,7 +100,11 @@ std::optional<std::filesystem::path> get_cache_directory()
 std::optional<std::filesystem::path> create_tmp_directory(const std::string& prefix)
 {
     // Inspired by https://stackoverflow.com/a/58454949/8548472
+#ifdef ANDROID
+    const auto tmp_dir = std::filesystem::path(mavsdk_temp_path);
+#else
     const auto tmp_dir = std::filesystem::temp_directory_path();
+#endif
 
     std::random_device dev;
     std::mt19937 prng(dev());
@@ -112,4 +126,17 @@ std::optional<std::filesystem::path> create_tmp_directory(const std::string& pre
     LogErr() << "Could not create a temporary directory, aborting.";
     return std::nullopt;
 }
+
+std::string replace_non_ascii_and_whitespace(const std::string& input)
+{
+    std::string result = input;
+    std::transform(result.begin(), result.end(), result.begin(), [](unsigned char ch) {
+        if (ch > 127 || std::isspace(ch)) {
+            return '_';
+        }
+        return static_cast<char>(ch);
+    });
+    return result;
+}
+
 } // namespace mavsdk

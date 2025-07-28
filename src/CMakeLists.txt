@@ -27,21 +27,28 @@ endif()
 option(BUILD_TESTING "Build tests" ON)
 option(CMAKE_POSITION_INDEPENDENT_CODE "Position independent code" ON)
 
-include(cmake/compiler_flags.cmake)
+include(../cmake/compiler_flags.cmake)
 
 find_package(Threads REQUIRED)
 
-if(NOT HUNTER_ENABLED)
-    list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/Modules/common")
+
+if(NOT MSVC)
+    list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/Modules/non-msvc")
 endif()
 
-# This will noop if hunter is not enabled
-hunter_add_package(jsoncpp)
-hunter_add_package(CURL)
-hunter_add_package(lzma)
 
-find_package(CURL REQUIRED)
-find_package(LibLZMA REQUIRED)
+message(STATUS "Build with CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
+message(STATUS "CMAKE_FIND_ROOT_PATHS: ${CMAKE_FIND_ROOT_PATH}")
+
+if(NOT BUILD_WITHOUT_CURL)
+    find_package(CURL REQUIRED)
+endif()
+if (CMAKE_CROSSCOMPILING)
+    find_package(LibLZMA HINTS "${CMAKE_PREFIX_PATH}" REQUIRED)
+else()
+    find_package(LibLZMA REQUIRED)
+endif()
 
 if(BUILD_TESTING AND (IOS OR ANDROID))
     message(STATUS "Building for iOS or Android: forcing BUILD_TESTING to FALSE...")
@@ -68,7 +75,7 @@ endif()
 
 add_subdirectory(mavsdk)
 
-include(cmake/static_analyzers.cmake)
+include(../cmake/static_analyzers.cmake)
 
 if(BUILD_TESTING)
     enable_testing()

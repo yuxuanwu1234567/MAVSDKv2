@@ -168,6 +168,8 @@ public:
         ProtocolError, /**< @brief There was a protocol error. */
         IntMessagesNotSupported, /**< @brief The system does not support the MISSION_INT protocol.
                                   */
+        FailedToOpenMissionPlannerPlan, /**< @brief Failed to open the Mission Planner plan. */
+        FailedToParseMissionPlannerPlan, /**< @brief Failed to parse the Mission Planner plan. */
     };
 
     /**
@@ -201,7 +203,9 @@ public:
      *
      * This function is blocking. See 'upload_mission_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result upload_mission(std::vector<MissionItem> mission_items) const;
 
@@ -218,7 +222,9 @@ public:
      *
      * This function is blocking. See 'upload_geofence_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result upload_geofence(std::vector<MissionItem> mission_items) const;
 
@@ -235,7 +241,9 @@ public:
      *
      * This function is blocking. See 'upload_rally_points_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result upload_rally_points(std::vector<MissionItem> mission_items) const;
 
@@ -244,7 +252,9 @@ public:
      *
      * This function is blocking.
      *
+
      * @return Result of request.
+
      */
     Result cancel_mission_upload() const;
 
@@ -316,7 +326,9 @@ public:
      *
      * This function is blocking.
      *
+
      * @return Result of request.
+
      */
     Result cancel_mission_download() const;
 
@@ -336,7 +348,9 @@ public:
      *
      * This function is blocking. See 'start_mission_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result start_mission() const;
 
@@ -362,7 +376,9 @@ public:
      *
      * This function is blocking. See 'pause_mission_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result pause_mission() const;
 
@@ -378,7 +394,9 @@ public:
      *
      * This function is blocking. See 'clear_mission_async' for the non-blocking counterpart.
      *
+
      * @return Result of request.
+
      */
     Result clear_mission() const;
 
@@ -399,9 +417,11 @@ public:
      * to a specific index of a raw mission item, the mission will be set to this item.
      *
      * This function is blocking. See 'set_current_mission_item_async' for the non-blocking
-     * counterpart.
+     counterpart.
      *
+
      * @return Result of request.
+
      */
     Result set_current_mission_item(int32_t index) const;
 
@@ -443,8 +463,7 @@ public:
     using MissionChangedHandle = Handle<bool>;
 
     /**
-     * @brief *
-     * Subscribes to mission changed.
+     * @brief Subscribes to mission changed.
      *
      * This notification can be used to be informed if a ground station has
      * been uploaded or changed by a ground station or companion computer.
@@ -489,6 +508,45 @@ public:
      */
     std::pair<Result, MissionRaw::MissionImportData>
     import_qgroundcontrol_mission_from_string(std::string qgc_plan) const;
+
+    /**
+     * @brief Import a Mission Planner mission in QGC WPL 110 format, from a file.
+     *
+     * Supported:
+     * - Waypoints
+     * - ArduPilot home position handling
+     *
+     * This function is blocking.
+     *
+     * @return Result of request.
+     */
+    std::pair<Result, MissionRaw::MissionImportData>
+    import_mission_planner_mission(std::string mission_planner_path) const;
+
+    /**
+     * @brief Import a Mission Planner mission in QGC WPL 110 format, from a string.
+     *
+     * Supported:
+     * - Waypoints
+     * - ArduPilot home position handling
+     *
+     * This function is blocking.
+     *
+     * @return Result of request.
+     */
+    std::pair<Result, MissionRaw::MissionImportData>
+    import_mission_planner_mission_from_string(std::string mission_planner_mission) const;
+
+    /**
+     * @brief Check if the mission is finished.
+     *
+     * Returns true if the mission is finished, false otherwise.
+     *
+     * This function is blocking.
+     *
+     * @return Result of request.
+     */
+    std::pair<Result, bool> is_mission_finished() const;
 
     /**
      * @brief Copy constructor.

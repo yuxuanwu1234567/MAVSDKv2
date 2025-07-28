@@ -32,6 +32,8 @@ public:
         uint32_t param2 = 0);
 
 private:
+    static constexpr unsigned RETRIES = 4;
+
     struct WorkItem {
         uint32_t message_id{0};
         uint8_t target_component{0};
@@ -57,6 +59,8 @@ private:
     std::mutex _mutex{};
     std::vector<WorkItem> _work_items{};
     std::vector<int> _deferred_message_cleanup{};
+
+    bool _debugging{false};
 };
 
 } // namespace mavsdk

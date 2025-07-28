@@ -33,9 +33,11 @@ TEST(SystemTest, FtpDownloadFile)
     Mavsdk mavsdk_autopilot{Mavsdk::Configuration{ComponentType::Autopilot}};
     mavsdk_autopilot.set_timeout_s(reduced_timeout_s);
 
-    ASSERT_EQ(mavsdk_groundstation.add_any_connection("udp://:17000"), ConnectionResult::Success);
     ASSERT_EQ(
-        mavsdk_autopilot.add_any_connection("udp://127.0.0.1:17000"), ConnectionResult::Success);
+        mavsdk_groundstation.add_any_connection("udpin://0.0.0.0:17000"),
+        ConnectionResult::Success);
+    ASSERT_EQ(
+        mavsdk_autopilot.add_any_connection("udpout://127.0.0.1:17000"), ConnectionResult::Success);
 
     auto ftp_server = FtpServer{mavsdk_autopilot.server_component()};
 
@@ -104,9 +106,11 @@ TEST(SystemTest, FtpDownloadBigFile)
     Mavsdk mavsdk_autopilot{Mavsdk::Configuration{ComponentType::Autopilot}};
     mavsdk_autopilot.set_timeout_s(reduced_timeout_s);
 
-    ASSERT_EQ(mavsdk_groundstation.add_any_connection("udp://:17000"), ConnectionResult::Success);
     ASSERT_EQ(
-        mavsdk_autopilot.add_any_connection("udp://127.0.0.1:17000"), ConnectionResult::Success);
+        mavsdk_groundstation.add_any_connection("udpin://0.0.0.0:17000"),
+        ConnectionResult::Success);
+    ASSERT_EQ(
+        mavsdk_autopilot.add_any_connection("udpout://127.0.0.1:17000"), ConnectionResult::Success);
 
     auto ftp_server = FtpServer{mavsdk_autopilot.server_component()};
 
@@ -162,9 +166,11 @@ TEST(SystemTest, FtpDownloadBigFileLossy)
     mavsdk_groundstation.intercept_incoming_messages_async(drop_some);
     mavsdk_groundstation.intercept_outgoing_messages_async(drop_some);
 
-    ASSERT_EQ(mavsdk_groundstation.add_any_connection("udp://:17000"), ConnectionResult::Success);
     ASSERT_EQ(
-        mavsdk_autopilot.add_any_connection("udp://127.0.0.1:17000"), ConnectionResult::Success);
+        mavsdk_groundstation.add_any_connection("udpin://0.0.0.0:17000"),
+        ConnectionResult::Success);
+    ASSERT_EQ(
+        mavsdk_autopilot.add_any_connection("udpout://127.0.0.1:17000"), ConnectionResult::Success);
 
     auto ftp_server = FtpServer{mavsdk_autopilot.server_component()};
 
@@ -178,18 +184,21 @@ TEST(SystemTest, FtpDownloadBigFileLossy)
 
     auto ftp = Ftp{system};
 
+    unsigned slow_down_counter = 0;
     auto prom = std::promise<Ftp::Result>();
     auto fut = prom.get_future();
     ftp.download_async(
         ("" / temp_file).string(),
         temp_dir_downloaded.string(),
         false,
-        [&prom](Ftp::Result result, Ftp::ProgressData progress_data) {
+        [&prom, &slow_down_counter](Ftp::Result result, Ftp::ProgressData progress_data) {
             if (result != Ftp::Result::Next) {
                 prom.set_value(result);
             } else {
-                LogDebug() << "Download progress: " << progress_data.bytes_transferred << "/"
-                           << progress_data.total_bytes << " bytes";
+                if (slow_down_counter++ % 10 == 0) {
+                    LogDebug() << "Download progress: " << progress_data.bytes_transferred << "/"
+                               << progress_data.total_bytes << " bytes";
+                }
             }
         });
 
@@ -221,14 +230,20 @@ TEST(SystemTest, FtpDownloadStopAndTryAgain)
 
     // Once we received half, we want to stop all traffic.
     bool got_half = false;
-    auto drop_at_some_point = [&got_half](mavlink_message_t&) { return !got_half; };
+    std::mutex got_half_mutex;
+    auto drop_at_some_point = [&got_half, &got_half_mutex](mavlink_message_t&) {
+        std::lock_guard<std::mutex> lock(got_half_mutex);
+        return !got_half;
+    };
 
     mavsdk_groundstation.intercept_incoming_messages_async(drop_at_some_point);
     mavsdk_groundstation.intercept_outgoing_messages_async(drop_at_some_point);
 
-    ASSERT_EQ(mavsdk_groundstation.add_any_connection("udp://:17000"), ConnectionResult::Success);
     ASSERT_EQ(
-        mavsdk_autopilot.add_any_connection("udp://127.0.0.1:17000"), ConnectionResult::Success);
+        mavsdk_groundstation.add_any_connection("udpin://0.0.0.0:17000"),
+        ConnectionResult::Success);
+    ASSERT_EQ(
+        mavsdk_autopilot.add_any_connection("udpout://127.0.0.1:17000"), ConnectionResult::Success);
 
     auto ftp_server = FtpServer{mavsdk_autopilot.server_component()};
 
@@ -243,21 +258,26 @@ TEST(SystemTest, FtpDownloadStopAndTryAgain)
     auto ftp = Ftp{system};
 
     {
+        unsigned slow_down_counter = 0;
         auto prom = std::promise<Ftp::Result>();
         auto fut = prom.get_future();
         ftp.download_async(
             ("" / temp_file).string(),
             temp_dir_downloaded.string(),
             false,
-            [&prom, &got_half](Ftp::Result result, Ftp::ProgressData progress_data) {
+            [&prom, &got_half, &got_half_mutex, &slow_down_counter](
+                Ftp::Result result, Ftp::ProgressData progress_data) {
                 if (progress_data.bytes_transferred > 200) {
+                    std::lock_guard<std::mutex> lock(got_half_mutex);
                     got_half = true;
                 }
                 if (result != Ftp::Result::Next) {
                     prom.set_value(result);
                 } else {
-                    LogDebug() << "Download progress: " << progress_data.bytes_transferred << "/"
-                               << progress_data.total_bytes << " bytes";
+                    if (slow_down_counter++ % 10 == 0) {
+                        LogDebug() << "Download progress: " << progress_data.bytes_transferred
+                                   << "/" << progress_data.total_bytes << " bytes";
+                    }
                 }
             });
 
@@ -307,9 +327,11 @@ TEST(SystemTest, FtpDownloadFileOutsideOfRoot)
     Mavsdk mavsdk_autopilot{Mavsdk::Configuration{ComponentType::Autopilot}};
     mavsdk_autopilot.set_timeout_s(reduced_timeout_s);
 
-    ASSERT_EQ(mavsdk_groundstation.add_any_connection("udp://:17000"), ConnectionResult::Success);
     ASSERT_EQ(
-        mavsdk_autopilot.add_any_connection("udp://127.0.0.1:17000"), ConnectionResult::Success);
+        mavsdk_groundstation.add_any_connection("udpin://0.0.0.0:17000"),
+        ConnectionResult::Success);
+    ASSERT_EQ(
+        mavsdk_autopilot.add_any_connection("udpout://127.0.0.1:17000"), ConnectionResult::Success);
 
     auto ftp_server = FtpServer{mavsdk_autopilot.server_component()};
 

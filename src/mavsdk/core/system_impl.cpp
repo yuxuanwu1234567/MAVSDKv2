@@ -2,6 +2,7 @@
 #include "mavsdk_impl.h"
 #include "mavlink_include.h"
 #include "system_impl.h"
+#include <mav/MessageSet.h>
 #include "server_component_impl.h"
 #include "plugin_impl_base.h"
 #include "px4_custom_mode.h"
@@ -36,6 +37,12 @@ SystemImpl::SystemImpl(MavsdkImpl& mavsdk_impl) :
     _mavlink_ftp_client(*this),
     _mavlink_component_metadata(*this)
 {
+    if (const char* env_p = std::getenv("MAVSDK_MESSAGE_DEBUGGING")) {
+        if (std::string(env_p) == "1") {
+            _message_debugging = true;
+        }
+    }
+
     _system_thread = new std::thread(&SystemImpl::system_thread, this);
 }
 
@@ -43,6 +50,7 @@ SystemImpl::~SystemImpl()
 {
     _should_exit = true;
     _mavlink_message_handler.unregister_all(this);
+    unregister_all_libmav_message_handlers(this);
 
     unregister_timeout_handler(_heartbeat_timeout_cookie);
 
@@ -113,6 +121,95 @@ void SystemImpl::update_component_id_messages_handler(
     _mavlink_message_handler.update_component_id(msg_id, component_id, cookie);
 }
 
+void SystemImpl::process_libmav_message(const LibmavMessage& message)
+{
+    // Call all registered libmav message handlers
+    std::lock_guard<std::mutex> lock(_libmav_message_handlers_mutex);
+
+    if (_message_debugging) {
+        LogDebug() << "SystemImpl::process_libmav_message: " << message.message_name
+                   << ", registered handlers: " << _libmav_message_handlers.size();
+    }
+
+    for (const auto& handler : _libmav_message_handlers) {
+        if (_message_debugging) {
+            LogDebug() << "Checking handler for message: '" << handler.message_name << "' against '"
+                       << message.message_name << "'";
+        }
+        // Check if message name matches (empty string means match all messages)
+        if (!handler.message_name.empty() && handler.message_name != message.message_name) {
+            if (_message_debugging) {
+                LogDebug() << "Handler message name mismatch, skipping";
+            }
+            continue;
+        }
+
+        // Check if component ID matches (if specified)
+        if (handler.component_id.has_value() &&
+            handler.component_id.value() != message.component_id) {
+            continue;
+        }
+
+        // Call the handler
+        if (_message_debugging) {
+            LogDebug() << "Calling libmav handler for: " << message.message_name;
+        }
+        if (handler.callback) {
+            handler.callback(message);
+        } else {
+            LogWarn() << "Handler callback is null!";
+        }
+    }
+}
+
+void SystemImpl::register_libmav_message_handler(
+    const std::string& message_name, const LibmavMessageCallback& callback, const void* cookie)
+{
+    std::lock_guard<std::mutex> lock(_libmav_message_handlers_mutex);
+    if (_message_debugging) {
+        LogDebug() << "Registering libmav handler for message: '" << message_name
+                   << "', total handlers will be: " << (_libmav_message_handlers.size() + 1);
+    }
+    _libmav_message_handlers.push_back({message_name, callback, cookie, std::nullopt});
+}
+
+void SystemImpl::register_libmav_message_handler_with_compid(
+    const std::string& message_name,
+    uint8_t cmp_id,
+    const LibmavMessageCallback& callback,
+    const void* cookie)
+{
+    std::lock_guard<std::mutex> lock(_libmav_message_handlers_mutex);
+    _libmav_message_handlers.push_back({message_name, callback, cookie, cmp_id});
+}
+
+void SystemImpl::unregister_libmav_message_handler(
+    const std::string& message_name, const void* cookie)
+{
+    std::lock_guard<std::mutex> lock(_libmav_message_handlers_mutex);
+
+    _libmav_message_handlers.erase(
+        std::remove_if(
+            _libmav_message_handlers.begin(),
+            _libmav_message_handlers.end(),
+            [&](const LibmavMessageHandler& handler) {
+                return handler.message_name == message_name && handler.cookie == cookie;
+            }),
+        _libmav_message_handlers.end());
+}
+
+void SystemImpl::unregister_all_libmav_message_handlers(const void* cookie)
+{
+    std::lock_guard<std::mutex> lock(_libmav_message_handlers_mutex);
+
+    _libmav_message_handlers.erase(
+        std::remove_if(
+            _libmav_message_handlers.begin(),
+            _libmav_message_handlers.end(),
+            [&](const LibmavMessageHandler& handler) { return handler.cookie == cookie; }),
+        _libmav_message_handlers.end());
+}
+
 TimeoutHandler::Cookie
 SystemImpl::register_timeout_handler(const std::function<void()>& callback, double duration_s)
 {
@@ -142,7 +239,6 @@ void SystemImpl::enable_timesync()
 System::IsConnectedHandle
 SystemImpl::subscribe_is_connected(const System::IsConnectedCallback& callback)
 {
-    std::lock_guard<std::mutex> lock(_connection_mutex);
     return _is_connected_callbacks.subscribe(callback);
 }
 
@@ -490,8 +586,6 @@ void SystemImpl::set_connected()
 {
     bool enable_needed = false;
     {
-        std::lock_guard<std::mutex> lock(_connection_mutex);
-
         if (!_connected) {
             if (!_components.empty()) {
                 LogDebug() << "Discovered " << _components.size() << " component(s)";
@@ -499,35 +593,46 @@ void SystemImpl::set_connected()
 
             _connected = true;
 
-            // We call this later to avoid deadlocks on creating the server components.
-            _mavsdk_impl.call_user_callback([this]() {
-                // Send a heartbeat back immediately.
-                _mavsdk_impl.start_sending_heartbeats();
-            });
+            // Only send heartbeats if we're not shutting down
+            if (!_should_exit) {
+                // We call this later to avoid deadlocks on creating the server components.
+                _mavsdk_impl.call_user_callback([this]() {
+                    // Send a heartbeat back immediately.
+                    _mavsdk_impl.start_sending_heartbeats();
+                });
+            }
 
             _heartbeat_timeout_cookie =
                 register_timeout_handler([this] { heartbeats_timed_out(); }, HEARTBEAT_TIMEOUT_S);
 
             enable_needed = true;
 
+            // Queue callbacks without holding any locks to avoid deadlocks
             _is_connected_callbacks.queue(
                 true, [this](const auto& func) { _mavsdk_impl.call_user_callback(func); });
 
         } else if (_connected) {
             refresh_timeout_handler(_heartbeat_timeout_cookie);
         }
-        // If not yet connected there is nothing to do/
+        // If not yet connected there is nothing to do
     }
 
     if (enable_needed) {
+        // Notify about the new system without holding any locks
         _mavsdk_impl.notify_on_discover();
 
         if (has_autopilot()) {
             send_autopilot_version_request();
         }
 
-        std::lock_guard<std::mutex> lock(_plugin_impls_mutex);
-        for (auto plugin_impl : _plugin_impls) {
+        // Enable plugins
+        std::vector<PluginImplBase*> plugin_impls_to_enable;
+        {
+            std::lock_guard<std::mutex> lock(_plugin_impls_mutex);
+            plugin_impls_to_enable = _plugin_impls;
+        }
+
+        for (auto plugin_impl : plugin_impls_to_enable) {
             plugin_impl->enable();
         }
     }
@@ -536,8 +641,6 @@ void SystemImpl::set_connected()
 void SystemImpl::set_disconnected()
 {
     {
-        std::lock_guard<std::mutex> lock(_connection_mutex);
-
         // This might not be needed because this is probably called from the triggered
         // timeout anyway, but it should also do no harm.
         // unregister_timeout_handler(_heartbeat_timeout_cookie);
@@ -587,6 +690,11 @@ uint8_t SystemImpl::get_own_component_id() const
 MAV_TYPE SystemImpl::get_vehicle_type() const
 {
     return _vehicle_type;
+}
+
+Vehicle SystemImpl::vehicle() const
+{
+    return to_vehicle_from_mav_type(_vehicle_type);
 }
 
 uint8_t SystemImpl::get_own_mav_type() const
@@ -1287,6 +1395,16 @@ MavlinkParameterClient* SystemImpl::param_sender(uint8_t component_id, bool exte
          extended});
 
     return _mavlink_parameter_clients.back().parameter_client.get();
+}
+
+std::vector<Connection*> SystemImpl::get_connections() const
+{
+    return _mavsdk_impl.get_connections();
+}
+
+mav::MessageSet& SystemImpl::get_message_set() const
+{
+    return _mavsdk_impl.get_message_set();
 }
 
 } // namespace mavsdk

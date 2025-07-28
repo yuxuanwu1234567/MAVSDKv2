@@ -145,6 +145,8 @@ private:
     void start_sending_tracking_status(uint32_t interval_us);
     void stop_sending_tracking_status();
     void send_tracking_status_with_interval(uint32_t interval_us);
+    void start_sending_capture_status();
+    void stop_sending_capture_status();
 
     std::optional<mavlink_command_ack_t>
     process_camera_information_request(const MavlinkCommandReceiver::CommandLong& command);
@@ -193,17 +195,28 @@ private:
     std::optional<mavlink_command_ack_t>
     process_set_message_interval(const MavlinkCommandReceiver::CommandLong& command);
 
+    std::optional<mavlink_command_ack_t>
+    process_request_message(const MavlinkCommandReceiver::CommandLong& command);
+
+    std::optional<mavlink_command_ack_t>
+    send_camera_information(const MavlinkCommandReceiver::CommandLong& command);
+
     void send_capture_status();
 
     bool _is_information_set{};
 
+    std::mutex _mutex{};
+
     // CAMERA_TRACKING_STATUS messages sending fields
-    std::mutex _tracking_status_mutex{};
     bool _sending_tracking_status{};
     TrackingMode _tracking_mode{};
     CameraServer::TrackPoint _tracked_point{};
     CameraServer::TrackRectangle _tracked_rectangle{};
     std::thread _tracking_status_sending_thread{};
+
+    // CAMERA_CAPTURE_STATUS periodic sending fields
+    static constexpr float CAPTURE_STATUS_INTERVAL_S = 5.0f; // 0.2 Hz
+    CallEveryHandler::Cookie _capture_status_timer_cookie{};
 
     CameraServer::Information _information{};
     bool _is_video_streaming_set{};
@@ -258,6 +271,8 @@ private:
     MavlinkCommandReceiver::CommandLong _last_zoom_out_start_command;
     MavlinkCommandReceiver::CommandLong _last_zoom_stop_command;
     MavlinkCommandReceiver::CommandLong _last_zoom_range_command;
+
+    int32_t _last_interval_index{0};
 };
 
 } // namespace mavsdk

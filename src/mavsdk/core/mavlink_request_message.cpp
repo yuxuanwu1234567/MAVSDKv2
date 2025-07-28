@@ -16,7 +16,14 @@ MavlinkRequestMessage::MavlinkRequestMessage(
     _command_sender(command_sender),
     _message_handler(message_handler),
     _timeout_handler(timeout_handler)
-{}
+{
+    if (const char* env_p = std::getenv("MAVSDK_COMMAND_DEBUGGING")) {
+        if (std::string(env_p) == "1") {
+            LogDebug() << "Command debugging is on.";
+            _debugging = true;
+        }
+    }
+}
 
 void MavlinkRequestMessage::request(
     uint32_t message_id,
@@ -71,11 +78,13 @@ void MavlinkRequestMessage::send_request(WorkItem& item)
 
 void MavlinkRequestMessage::send_request_using_new_command(WorkItem& item)
 {
-    if (item.retries > 0) {
-        LogWarn() << "Request message " << item.message_id
-                  << " again using REQUEST_MESSAGE (retries: " << item.retries << ")";
-    } else {
-        LogDebug() << "Request message " << item.message_id << " using REQUEST_MESSAGE";
+    if (_debugging) {
+        if (item.retries > 0) {
+            LogDebug() << "Request message " << item.message_id
+                       << " again using REQUEST_MESSAGE (retries: " << item.retries << ")";
+        } else {
+            LogDebug() << "Request message " << item.message_id << " using REQUEST_MESSAGE";
+        }
     }
 
     MavlinkCommandSender::CommandLong command_request_message{};
@@ -89,7 +98,8 @@ void MavlinkRequestMessage::send_request_using_new_command(WorkItem& item)
             if (result != MavlinkCommandSender::Result::InProgress) {
                 handle_command_result(message_id, result);
             }
-        });
+        },
+        1);
 }
 
 bool MavlinkRequestMessage::try_sending_request_using_old_command(WorkItem& item)
@@ -166,8 +176,10 @@ bool MavlinkRequestMessage::try_sending_request_using_old_command(WorkItem& item
             return false;
     }
 
-    LogWarn() << "Request message " << item.message_id << " again using " << command_name
-              << " (retries: " << item.retries << ")";
+    if (_debugging) {
+        LogDebug() << "Request message " << item.message_id << " again using " << command_name
+                   << " (retries: " << item.retries << ")";
+    }
 
     _command_sender.queue_command_async(
         command_request_message,
@@ -175,7 +187,8 @@ bool MavlinkRequestMessage::try_sending_request_using_old_command(WorkItem& item
             if (result != MavlinkCommandSender::Result::InProgress) {
                 handle_command_result(message_id, result);
             }
-        });
+        },
+        1);
 
     return true;
 }
@@ -232,10 +245,6 @@ void MavlinkRequestMessage::handle_command_result(
                     1.0);
                 return;
 
-            case MavlinkCommandSender::Result::NoSystem:
-                // FALLTHROUGH
-            case MavlinkCommandSender::Result::ConnectionError:
-                // FALLTHROUGH
             case MavlinkCommandSender::Result::Busy:
                 // FALLTHROUGH
             case MavlinkCommandSender::Result::Denied:
@@ -245,6 +254,24 @@ void MavlinkRequestMessage::handle_command_result(
             case MavlinkCommandSender::Result::Timeout:
                 // FALLTHROUGH
             case MavlinkCommandSender::Result::TemporarilyRejected:
+                // It looks like we should try again
+                if (++it->retries > RETRIES) {
+                    // We have already retried, let's give up.
+                    auto temp_callback = it->callback;
+                    _message_handler.unregister_one(it->message_id, this);
+                    _work_items.erase(it);
+                    lock.unlock();
+                    if (temp_callback) {
+                        temp_callback(MavlinkCommandSender::Result::Timeout, {});
+                    }
+                } else {
+                    send_request(*it);
+                }
+                return;
+
+            case MavlinkCommandSender::Result::NoSystem:
+                // FALLTHROUGH
+            case MavlinkCommandSender::Result::ConnectionError:
                 // FALLTHROUGH
             case MavlinkCommandSender::Result::Failed:
                 // FALLTHROUGH
@@ -280,7 +307,7 @@ void MavlinkRequestMessage::handle_timeout(uint32_t message_id, uint8_t target_c
             continue;
         }
 
-        if (++it->retries > 3) {
+        if (++it->retries > RETRIES) {
             // We have already retried, let's give up.
             auto temp_callback = it->callback;
             _message_handler.unregister_one(it->message_id, this);

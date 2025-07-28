@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <fcntl.h>
+#include <sstream>
 
 #ifdef WINDOWS
 #ifndef MINGW
@@ -29,10 +30,16 @@
 namespace mavsdk {
 TcpServerConnection::TcpServerConnection(
     Connection::ReceiverCallback receiver_callback,
+    Connection::LibmavReceiverCallback libmav_receiver_callback,
+    mav::MessageSet& message_set,
     std::string local_ip,
     int local_port,
     ForwardingOption forwarding_option) :
-    Connection(std::move(receiver_callback), forwarding_option),
+    Connection(
+        std::move(receiver_callback),
+        std::move(libmav_receiver_callback),
+        message_set,
+        forwarding_option),
     _local_ip(std::move(local_ip)),
     _local_port(local_port)
 {}
@@ -45,6 +52,10 @@ TcpServerConnection::~TcpServerConnection()
 ConnectionResult TcpServerConnection::start()
 {
     if (!start_mavlink_receiver()) {
+        return ConnectionResult::ConnectionsExhausted;
+    }
+
+    if (!start_libmav_receiver()) {
         return ConnectionResult::ConnectionsExhausted;
     }
 
@@ -80,6 +91,30 @@ ConnectionResult TcpServerConnection::start()
         return ConnectionResult::SocketError;
     }
 
+    // Set receive timeout cross-platform
+    const unsigned timeout_ms = 500;
+
+#if defined(WINDOWS)
+    setsockopt(
+        _server_socket_fd.get(),
+        SOL_SOCKET,
+        SO_RCVTIMEO,
+        (const char*)&timeout_ms,
+        sizeof(timeout_ms));
+    setsockopt(
+        _client_socket_fd.get(),
+        SOL_SOCKET,
+        SO_RCVTIMEO,
+        (const char*)&timeout_ms,
+        sizeof(timeout_ms));
+#else
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = timeout_ms * 1000;
+    setsockopt(_server_socket_fd.get(), SOL_SOCKET, SO_RCVTIMEO, (const void*)&tv, sizeof(tv));
+    setsockopt(_client_socket_fd.get(), SOL_SOCKET, SO_RCVTIMEO, (const void*)&tv, sizeof(tv));
+#endif
+
     _accept_receive_thread =
         std::make_unique<std::thread>(&TcpServerConnection::accept_client, this);
 
@@ -90,13 +125,13 @@ ConnectionResult TcpServerConnection::stop()
 {
     _should_exit = true;
 
-    _client_socket_fd.close();
-    _server_socket_fd.close();
-
     if (_accept_receive_thread && _accept_receive_thread->joinable()) {
         _accept_receive_thread->join();
         _accept_receive_thread.reset();
     }
+
+    _client_socket_fd.close();
+    _server_socket_fd.close();
 
     // We need to stop this after stopping the receive thread, otherwise
     // it can happen that we interfere with the parsing of a message.
@@ -105,8 +140,10 @@ ConnectionResult TcpServerConnection::stop()
     return ConnectionResult::Success;
 }
 
-bool TcpServerConnection::send_message(const mavlink_message_t& message)
+std::pair<bool, std::string> TcpServerConnection::send_message(const mavlink_message_t& message)
 {
+    std::pair<bool, std::string> result;
+
     uint8_t buffer[MAVLINK_MAX_PACKET_LEN];
     uint16_t buffer_len = mavlink_msg_to_send_buffer(buffer, &message);
 
@@ -122,10 +159,16 @@ bool TcpServerConnection::send_message(const mavlink_message_t& message)
         send(_client_socket_fd.get(), reinterpret_cast<const char*>(buffer), buffer_len, flags);
 
     if (send_len != buffer_len) {
-        LogErr() << "send failure: " << GET_ERROR(errno);
-        return false;
+        std::stringstream ss;
+        ss << "Send failure: " << GET_ERROR(errno);
+        LogErr() << ss.str();
+        result.first = false;
+        result.second = ss.str();
+        return result;
     }
-    return true;
+
+    result.first = true;
+    return result;
 }
 
 void TcpServerConnection::accept_client()

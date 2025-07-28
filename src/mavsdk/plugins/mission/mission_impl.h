@@ -127,6 +127,7 @@ private:
         std::weak_ptr<MavlinkMissionTransferClient::WorkItem> last_upload{};
         std::weak_ptr<MavlinkMissionTransferClient::WorkItem> last_download{};
         bool gimbal_v2_in_control{false};
+        uint8_t mission_state{MISSION_STATE_UNKNOWN};
     } _mission_data{};
 
     TimeoutHandler::Cookie _timeout_cookie{};
