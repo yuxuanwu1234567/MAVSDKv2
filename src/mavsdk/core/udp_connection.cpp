@@ -116,7 +116,7 @@ bool UdpConnection::send_message(const mavlink_message_t& message)
     std::lock_guard<std::mutex> lock(_remote_mutex);
 
     if (_remotes.size() == 0) {
-        return false;
+        // return false;
     }
 
     // Send the message to all the remotes. A remote is a UDP endpoint

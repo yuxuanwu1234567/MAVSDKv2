@@ -95,8 +95,8 @@ void MavlinkCommandReceiver::receive_command_long(const mavlink_message_t& messa
     if (cmd.target_component_id != _server_component_impl.get_own_component_id() &&
         cmd.target_component_id != MAV_COMP_ID_ALL) {
         if (_debugging) {
-            LogDebug() << "Ignored command long to component " << (int)cmd.target_component_id
-                       << " instead of " << (int)_server_component_impl.get_own_component_id();
+            // LogDebug() << "Ignored command long to component " << (int)cmd.target_component_id
+            //            << " instead of " << (int)_server_component_impl.get_own_component_id();
         }
         return;
     }

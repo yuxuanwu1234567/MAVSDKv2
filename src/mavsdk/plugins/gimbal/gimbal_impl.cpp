@@ -54,8 +54,8 @@ void GimbalImpl::enable()
         }
     }
 
-    _request_gimbal_information_cookie =
-        _system_impl->add_call_every([this]() { request_gimbal_information(); }, 3.0);
+    // _request_gimbal_information_cookie =
+        // _system_impl->add_call_every([this]() { request_gimbal_information(); }, 3.0);
 }
 
 void GimbalImpl::disable()
@@ -77,9 +77,9 @@ void GimbalImpl::receive_protocol_timeout()
     // We did not receive a GIMBAL_MANAGER_INFORMATION in time, so we have to
     // assume Version2 is not available.
 
-    _system_impl->remove_call_every(_request_gimbal_information_cookie);
+    // _system_impl->remove_call_every(_request_gimbal_information_cookie);
 
-    LogWarn() << "Falling back to Gimbal Version 1";
+    // LogWarn() << "Falling back to Gimbal Version 1";
     std::lock_guard<std::mutex> lock(_mutex);
     _gimbal_protocol.reset(new GimbalProtocolV1(*_system_impl));
     _protocol_cookie = {};

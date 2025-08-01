@@ -84,7 +84,7 @@ private:
     CallbackList<Gimbal::ControlStatus> _control_subscriptions{};
     CallbackList<Gimbal::Attitude> _attitude_subscriptions{};
 
-    CallEveryHandler::Cookie _request_gimbal_information_cookie{};
+    // CallEveryHandler::Cookie _request_gimbal_information_cookie{};
 };
 
 } // namespace mavsdk
