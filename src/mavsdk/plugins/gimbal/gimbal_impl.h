@@ -152,11 +152,6 @@ private:
     CallbackList<Gimbal::GimbalList> _gimbal_list_subscriptions{};
     CallbackList<Gimbal::ControlStatus> _control_status_subscriptions{};
     CallbackList<Gimbal::Attitude> _attitude_subscriptions{};
-
-    std::vector<GimbalItem> _gimbals;
-    float _vehicle_yaw_rad{NAN};
-
-    bool _debugging{false};
 };
 
 } // namespace mavsdk

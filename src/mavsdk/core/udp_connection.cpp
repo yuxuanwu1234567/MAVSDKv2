@@ -122,9 +122,8 @@ std::pair<bool, std::string> UdpConnection::send_message(const mavlink_message_t
     std::lock_guard<std::mutex> lock(_remote_mutex);
 
     if (_remotes.size() == 0) {
-        result.first = false;
-        result.second = "no remotes";
-        return result;
+        LogErr() << "No known remotes";
+        return false;
     }
 
     // Send the message to all the remotes. A remote is a UDP endpoint

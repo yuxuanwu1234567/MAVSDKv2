@@ -10,6 +10,7 @@
 #include <future>
 #include <iostream>
 #include <iomanip>
+#include <string>
 #include <cstring>
 #include <string>
 #include <thread>
