@@ -2573,219 +2573,249 @@ std::pair<Telemetry::Result, Telemetry::GpsGlobalOrigin> TelemetryImpl::get_gps_
     return fut.get();
 }
 
-void TelemetryImpl::check_calibration()
-{
-    {
-        std::lock_guard<std::mutex> lock(_health_mutex);
-        if ((_has_received_gyro_calibration && _has_received_accel_calibration &&
-             _has_received_mag_calibration) ||
-            _hitl_enabled) {
-            _system_impl->remove_call_every(_calibration_cookie);
-            return;
-        }
-    }
-    if (_system_impl->has_autopilot()) {
-        if (_system_impl->autopilot() == Autopilot::ArduPilot) {
-            // We need to ask for the home position from ArduPilot
-            request_home_position_async();
+// void TelemetryImpl::check_calibration()
+// {
+//     {
+//         std::lock_guard<std::mutex> lock(_health_mutex);
+//         if ((_has_received_gyro_calibration && _has_received_accel_calibration &&
+//              _has_received_mag_calibration) ||
+//             _hitl_enabled) {
+//             _system_impl->remove_call_every(_calibration_cookie);
+//             return;
+//         }
+//     }
+//     if (_system_impl->has_autopilot()) {
+//         if (_system_impl->autopilot() == Autopilot::ArduPilot) {
+//             // We need to ask for the home position from ArduPilot
+//             request_home_position_async();
 
-            // ArduPilot calibration sets the offsets,
-            // if any offset is 0 the calibration is not complete/unhealthy.
-            _system_impl->get_param_float_async(
-                std::string("INS_GYROFFS_X"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_gyro_offset_x(result, value);
-                },
-                this);
+//             // ArduPilot calibration sets the offsets,
+//             // if any offset is 0 the calibration is not complete/unhealthy.
+//             _system_impl->get_param_float_async(
+//                 std::string("INS_GYROFFS_X"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_gyro_offset_x(result, value);
+//                 },
+//                 this);
 
-            _system_impl->get_param_float_async(
-                std::string("INS_GYROFFS_Y"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_gyro_offset_y(result, value);
-                },
-                this);
+//             _system_impl->get_param_float_async(
+//                 std::string("INS_GYROFFS_Y"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_gyro_offset_y(result, value);
+//                 },
+//                 this);
 
-            _system_impl->get_param_float_async(
-                std::string("INS_GYROFFS_Z"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_gyro_offset_z(result, value);
-                },
-                this);
+//             _system_impl->get_param_float_async(
+//                 std::string("INS_GYROFFS_Z"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_gyro_offset_z(result, value);
+//                 },
+//                 this);
 
-            _system_impl->get_param_float_async(
-                std::string("INS_ACCOFFS_X"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_accel_offset_x(result, value);
-                },
-                this);
+//             _system_impl->get_param_float_async(
+//                 std::string("INS_ACCOFFS_X"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_accel_offset_x(result, value);
+//                 },
+//                 this);
 
-            _system_impl->get_param_float_async(
-                std::string("INS_ACCOFFS_Y"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_accel_offset_y(result, value);
-                },
-                this);
+//             _system_impl->get_param_float_async(
+//                 std::string("INS_ACCOFFS_Y"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_accel_offset_y(result, value);
+//                 },
+//                 this);
 
-            _system_impl->get_param_float_async(
-                std::string("INS_ACCOFFS_Z"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_accel_offset_z(result, value);
-                },
-                this);
+//             _system_impl->get_param_float_async(
+//                 std::string("INS_ACCOFFS_Z"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_accel_offset_z(result, value);
+//                 },
+//                 this);
 
-            _system_impl->get_param_float_async(
-                std::string("COMPASS_OFS_X"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_mag_offset_x(result, value);
-                },
-                this);
+//             _system_impl->get_param_float_async(
+//                 std::string("COMPASS_OFS_X"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_mag_offset_x(result, value);
+//                 },
+//                 this);
 
-            _system_impl->get_param_float_async(
-                std::string("COMPASS_OFS_Y"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_mag_offset_y(result, value);
-                },
-                this);
+//             _system_impl->get_param_float_async(
+//                 std::string("COMPASS_OFS_Y"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_mag_offset_y(result, value);
+//                 },
+//                 this);
 
-            _system_impl->get_param_float_async(
-                std::string("COMPASS_OFS_Z"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_mag_offset_z(result, value);
-                },
-                this);
+//             _system_impl->get_param_float_async(
+//                 std::string("COMPASS_OFS_Z"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_mag_offset_z(result, value);
+//                 },
+//                 this);
 
-        } else {
-            _system_impl->get_param_int_async(
-                std::string("CAL_GYRO0_ID"),
-                [this](MavlinkParameterClient::Result result, int32_t value) {
-                    receive_param_cal_gyro(result, value);
-                },
-                this);
+//         } else {
+//             _system_impl->get_param_int_async(
+//                 std::string("CAL_GYRO0_ID"),
+//                 [this](MavlinkParameterClient::Result result, int32_t value) {
+//                     receive_param_cal_gyro(result, value);
+//                 },
+//                 this);
 
-            _system_impl->get_param_int_async(
-                std::string("CAL_ACC0_ID"),
-                [this](MavlinkParameterClient::Result result, int32_t value) {
-                    receive_param_cal_accel(result, value);
-                },
-                this);
+//             _system_impl->get_param_int_async(
+//                 std::string("CAL_ACC0_ID"),
+//                 [this](MavlinkParameterClient::Result result, int32_t value) {
+//                     receive_param_cal_accel(result, value);
+//                 },
+//                 this);
 
-            _system_impl->get_param_int_async(
-                std::string("CAL_MAG0_ID"),
-                [this](MavlinkParameterClient::Result result, int32_t value) {
-                    receive_param_cal_mag(result, value);
-                },
-                this);
+//             _system_impl->get_param_int_async(
+//                 std::string("CAL_MAG0_ID"),
+//                 [this](MavlinkParameterClient::Result result, int32_t value) {
+//                     receive_param_cal_mag(result, value);
+//                 },
+//                 this);
 
-            _system_impl->get_param_int_async(
-                std::string("SYS_HITL"),
-                [this](MavlinkParameterClient::Result result, int32_t value) {
-                    receive_param_hitl(result, value);
-                },
-                this);
-        }
-    }
-}
+//             _system_impl->get_param_int_async(
+//                 std::string("SYS_HITL"),
+//                 [this](MavlinkParameterClient::Result result, int32_t value) {
+//                     receive_param_hitl(result, value);
+//                 },
+//                 this);
+//         }
+//     }
+// }
 
-void TelemetryImpl::process_parameter_update(const std::string& name)
-{
-    if (_system_impl->autopilot() == Autopilot::ArduPilot) {
-        if (name.compare("INS_GYROFFS_X") == 0) {
-            _system_impl->get_param_float_async(
-                std::string("INS_GYROFFS_X"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_gyro_offset_x(result, value);
-                },
-                this);
-        } else if (name.compare("INS_GYROFFS_Y") == 0) {
-            _system_impl->get_param_float_async(
-                std::string("INS_GYROFFS_Y"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_gyro_offset_y(result, value);
-                },
-                this);
-        } else if (name.compare("INS_GYROFFS_Z") == 0) {
-            _system_impl->get_param_float_async(
-                std::string("INS_GYROFFS_Z"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_gyro_offset_z(result, value);
-                },
-                this);
-        } else if (name.compare("INS_ACCOFFS_X") == 0) {
-            _system_impl->get_param_float_async(
-                std::string("INS_ACCOFFS_X"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_accel_offset_x(result, value);
-                },
-                this);
-        } else if (name.compare("INS_ACCOFFS_Y") == 0) {
-            _system_impl->get_param_float_async(
-                std::string("INS_ACCOFFS_Y"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_accel_offset_y(result, value);
-                },
-                this);
-        } else if (name.compare("INS_ACCOFFS_Z") == 0) {
-            _system_impl->get_param_float_async(
-                std::string("INS_ACCOFFS_Z"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_accel_offset_z(result, value);
-                },
-                this);
-        } else if (name.compare("COMPASS_OFS_X") == 0) {
-            _system_impl->get_param_float_async(
-                std::string("COMPASS_OFS_X"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_mag_offset_x(result, value);
-                },
-                this);
-        } else if (name.compare("COMPASS_OFS_Y") == 0) {
-            _system_impl->get_param_float_async(
-                std::string("COMPASS_OFS_Y"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_mag_offset_y(result, value);
-                },
-                this);
-        } else if (name.compare("COMPASS_OFS_Z") == 0) {
-            _system_impl->get_param_float_async(
-                std::string("COMPASS_OFS_Z"),
-                [this](MavlinkParameterClient::Result result, float value) {
-                    receive_param_cal_mag_offset_z(result, value);
-                },
-                this);
-        }
-    } else {
-        if (name.compare("CAL_GYRO0_ID") == 0) {
-            _system_impl->get_param_int_async(
-                std::string("CAL_GYRO0_ID"),
-                [this](MavlinkParameterClient::Result result, int32_t value) {
-                    receive_param_cal_gyro(result, value);
-                },
-                this);
+// Telemetry::Result TelemetryImpl::set_gps_global_origin(const Telemetry::GpsGlobalOrigin& gps_origin)
+// {
+//     if (!_system_impl->is_connected()) {
+//         return Telemetry::Result::NoSystem;
+//     }
 
-        } else if (name.compare("CAL_ACC0_ID") == 0) {
-            _system_impl->get_param_int_async(
-                std::string("CAL_ACC0_ID"),
-                [this](MavlinkParameterClient::Result result, int32_t value) {
-                    receive_param_cal_accel(result, value);
-                },
-                this);
-        } else if (name.compare("CAL_MAG0_ID") == 0) {
-            _system_impl->get_param_int_async(
-                std::string("CAL_MAG0_ID"),
-                [this](MavlinkParameterClient::Result result, int32_t value) {
-                    receive_param_cal_mag(result, value);
-                },
-                this);
+//     const uint64_t autopilot_time_usec =
+//             std::chrono::duration_cast<std::chrono::microseconds>(
+//                 _system_impl->get_autopilot_time().now().time_since_epoch())
+//                 .count();
 
-        } else if (name.compare("SYS_HITL") == 0) {
-            _system_impl->get_param_int_async(
-                std::string("SYS_HITL"),
-                [this](MavlinkParameterClient::Result result, int32_t value) {
-                    receive_param_hitl(result, value);
-                },
-                this);
-        }
-    }
-}
+//     return _system_impl->queue_message([&](MavlinkAddress mavlink_address, uint8_t channel) {
+//         mavlink_message_t message;
+//         mavlink_msg_set_gps_global_origin_pack_chan(
+//             mavlink_address.system_id,
+//             mavlink_address.component_id,
+//             channel,
+//             &message,
+//             _system_impl->get_system_id(),
+//             gps_origin.latitude_deg * 1e7,
+//             gps_origin.longitude_deg * 1e7,
+//             gps_origin.altitude_m * 1e3f,
+//             autopilot_time_usec
+//             ); // FIXME: reset_counter not set
+//         return message;
+//     }) ?
+//     Telemetry::Result::Success :
+//     Telemetry::Result::ConnectionError;   
+// }
+
+// void TelemetryImpl::process_parameter_update(const std::string& name)
+// {
+//     if (_system_impl->autopilot() == Autopilot::ArduPilot) {
+//         if (name.compare("INS_GYROFFS_X") == 0) {
+//             _system_impl->get_param_float_async(
+//                 std::string("INS_GYROFFS_X"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_gyro_offset_x(result, value);
+//                 },
+//                 this);
+//         } else if (name.compare("INS_GYROFFS_Y") == 0) {
+//             _system_impl->get_param_float_async(
+//                 std::string("INS_GYROFFS_Y"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_gyro_offset_y(result, value);
+//                 },
+//                 this);
+//         } else if (name.compare("INS_GYROFFS_Z") == 0) {
+//             _system_impl->get_param_float_async(
+//                 std::string("INS_GYROFFS_Z"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_gyro_offset_z(result, value);
+//                 },
+//                 this);
+//         } else if (name.compare("INS_ACCOFFS_X") == 0) {
+//             _system_impl->get_param_float_async(
+//                 std::string("INS_ACCOFFS_X"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_accel_offset_x(result, value);
+//                 },
+//                 this);
+//         } else if (name.compare("INS_ACCOFFS_Y") == 0) {
+//             _system_impl->get_param_float_async(
+//                 std::string("INS_ACCOFFS_Y"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_accel_offset_y(result, value);
+//                 },
+//                 this);
+//         } else if (name.compare("INS_ACCOFFS_Z") == 0) {
+//             _system_impl->get_param_float_async(
+//                 std::string("INS_ACCOFFS_Z"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_accel_offset_z(result, value);
+//                 },
+//                 this);
+//         } else if (name.compare("COMPASS_OFS_X") == 0) {
+//             _system_impl->get_param_float_async(
+//                 std::string("COMPASS_OFS_X"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_mag_offset_x(result, value);
+//                 },
+//                 this);
+//         } else if (name.compare("COMPASS_OFS_Y") == 0) {
+//             _system_impl->get_param_float_async(
+//                 std::string("COMPASS_OFS_Y"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_mag_offset_y(result, value);
+//                 },
+//                 this);
+//         } else if (name.compare("COMPASS_OFS_Z") == 0) {
+//             _system_impl->get_param_float_async(
+//                 std::string("COMPASS_OFS_Z"),
+//                 [this](MavlinkParameterClient::Result result, float value) {
+//                     receive_param_cal_mag_offset_z(result, value);
+//                 },
+//                 this);
+//         }
+//     } else {
+//         if (name.compare("CAL_GYRO0_ID") == 0) {
+//             _system_impl->get_param_int_async(
+//                 std::string("CAL_GYRO0_ID"),
+//                 [this](MavlinkParameterClient::Result result, int32_t value) {
+//                     receive_param_cal_gyro(result, value);
+//                 },
+//                 this);
+
+//         } else if (name.compare("CAL_ACC0_ID") == 0) {
+//             _system_impl->get_param_int_async(
+//                 std::string("CAL_ACC0_ID"),
+//                 [this](MavlinkParameterClient::Result result, int32_t value) {
+//                     receive_param_cal_accel(result, value);
+//                 },
+//                 this);
+//         } else if (name.compare("CAL_MAG0_ID") == 0) {
+//             _system_impl->get_param_int_async(
+//                 std::string("CAL_MAG0_ID"),
+//                 [this](MavlinkParameterClient::Result result, int32_t value) {
+//                     receive_param_cal_mag(result, value);
+//                 },
+//                 this);
+
+//         } else if (name.compare("SYS_HITL") == 0) {
+//             _system_impl->get_param_int_async(
+//                 std::string("SYS_HITL"),
+//                 [this](MavlinkParameterClient::Result result, int32_t value) {
+//                     receive_param_hitl(result, value);
+//                 },
+//                 this);
+//         }
+//     }
+// }
 
 } // namespace mavsdk
