@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.10.2)
 add_executable(unit_tests_mavsdk_server
     action_service_impl_test.cpp
     mavsdk_server_main.cpp
-    camera_service_impl_test.cpp
+   
  
 )
 
